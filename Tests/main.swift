@@ -104,6 +104,42 @@ test("깨진·빠진 필드가 있어도 스냅샷 전체는 실패하지 않는
     try check(unknown.models.first?.requestCount, 7, "request_count 파싱")
 }
 
+test("잔여 비율은 1 − 사용 비율이고, 잔여 크레딧은 제공 크레딧과의 곱이다") {
+    let snapshot = try UsageSnapshot.decode(from: Data(observedUsageJSON.utf8))
+
+    // 사용 비율 0.002 → 잔여 비율 0.998 (독립 계산: 1 − 0.002)
+    try checkNear(snapshot.remainingRatio, 0.998, "잔여 비율")
+    try checkNear(snapshot.remainingCredits(pool: 60), 59.88, "잔여 크레딧 ($60 풀 기준)")
+}
+
+test("사용 비율이 범위를 벗어나면 잔여 비율은 0..1로 고정된다") {
+    // extra usage 로 풀을 넘어 쓴 경우 (소진 이상)
+    let over = try UsageSnapshot.decode(from: Data(#"{"limits":{"monthly":{"usage":1.2,"models":[]}}}"#.utf8))
+    try check(over.remainingRatio, 0.0, "풀 초과 사용 → 잔여 0")
+    let garbage = try UsageSnapshot.decode(from: Data(#"{"limits":{"monthly":{"usage":-0.5,"models":[]}}}"#.utf8))
+    try check(garbage.remainingRatio, 1.0, "비정상 음수 비율 → 잔여 1")
+}
+
+test("갱신 예정일은 기간 종료의 날짜(YYYY-MM-DD)뿐이다") {
+    let snapshot = try UsageSnapshot.decode(from: Data(observedUsageJSON.utf8))
+    try check(snapshot.resetDate, "2026-09-01", "실측 응답의 갱신 예정일")
+
+    // 자정 직전 종료도 UTC 날짜 기준으로 읽는다 (로컬 타임존으로 넘어가지 않게)
+    let lateNight = try UsageSnapshot.decode(from: Data(#"{"activity":{"period":{"ending_at":"2026-09-30T23:59:59.123Z"}}}"#.utf8))
+    try check(lateNight.resetDate, "2026-09-30", "UTC 날짜 기준")
+
+    // 기간이 아예 없거나 깨져 있으면 nil
+    let missing = try UsageSnapshot.decode(from: Data(#"{"limits":{"monthly":{}}}"#.utf8))
+    try check(missing.resetDate, Optional<String>.none, "기간 누락 → nil")
+}
+
+private func checkNear(_ actual: Double?, _ expected: Double, _ label: String) throws {
+    guard let actual else { throw CheckError(message: "\(label): nil (기대 \(expected))") }
+    guard abs(actual - expected) < 1e-9 else {
+        throw CheckError(message: "\(label): 기대 \(expected), 실제 \(actual)")
+    }
+}
+
 if failedCount > 0 {
     print("\n실패 \(failedCount)건")
     exit(1)
