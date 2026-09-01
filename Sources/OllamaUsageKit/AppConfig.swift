@@ -46,7 +46,7 @@ public struct AppConfig: Equatable, Sendable {
         ColorStage(minimumRemaining: 0.0, rgb: RGB(hex: "#FF453A")!),
     ]
 
-    /// 제공 크레딧 (Pool)
+    /// 제공 크레딧 (Pool) — 항상 내림차순 정렬을 유지한다(stage 선택의 전제).
     public let monthlyPoolUSD: Double
     /// 폴링 간격(초) — 10...300으로 고정한다.
     public let pollingIntervalSeconds: Double
@@ -59,14 +59,13 @@ public struct AppConfig: Equatable, Sendable {
     ) {
         self.monthlyPoolUSD = monthlyPoolUSD
         self.pollingIntervalSeconds = pollingIntervalSeconds
-        self.colorStages = colorStages
+        self.colorStages = colorStages.sorted { $0.minimumRemaining > $1.minimumRemaining }
     }
 
     /// 잔여 비율에 맞는 색상 단계 — 목록 위에서부터 처음으로 minimumRemaining 이하인 단계.
-    /// 맞는 단계가 없으면(모든 단계보다 낮은 잔여) 마지막 단계를 돌려준다.
+    /// colorStages는 항상 내림차순 정렬을 유지한다(init에서 정렬).
     public func stage(forRemaining ratio: Double) -> ColorStage? {
-        let sorted = colorStages.sorted { $0.minimumRemaining > $1.minimumRemaining }
-        return sorted.first { ratio >= $0.minimumRemaining } ?? sorted.last
+        colorStages.first { ratio >= $0.minimumRemaining } ?? colorStages.last
     }
 
     /// 설정 파일 표준 위치
@@ -76,7 +75,6 @@ public struct AppConfig: Equatable, Sendable {
             .appendingPathComponent("config.json")
     }
 
-    /// 설정 파일이 없으면 기본값으로 만들고 기본값을 돌려준다. 있으면 읽어서 돌려준다.
     /// 설정 파일이 없으면 기본값으로 만들고 기본값을 돌려준다. 있으면 읽어서 돌려준다.
     /// 파일이 깨져 있으면 기본값을 돌려주되 파일은 절대 건드리지 않는다(사용자 파일 파괴 금지).
     public static func loadOrCreate(at url: URL) -> AppConfig {
@@ -95,15 +93,9 @@ public struct AppConfig: Equatable, Sendable {
         return decode(from: data) ?? AppConfig()
     }
 
-    public func write(to url: URL) throws {
-        let data = try JSONSerialization.data(
-            withJSONObject: document,
-            options: [.prettyPrinted, .sortedKeys]
-        )
-        try data.write(to: url, options: .atomic)
-    }
-
     /// 깨진 속성은 기본값으로 대체해 읽는다 — 전체가 실패하지 않게(무문서 API와 같은 원칙).
+    /// 값 표기는 래퍼(`{"description", "value"}`)와 bare 값 둘 다 받는다 — 사용자가 설명을
+    /// 지우고 값만 남기는 가장 흔한 수정을 막지 않는다.
     public static func decode(from data: Data) -> AppConfig? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
@@ -151,10 +143,16 @@ public struct AppConfig: Equatable, Sendable {
 
 private extension AppConfig {
     static func numberValue(_ property: Any?) -> Double? {
-        guard let description = property as? [String: Any],
-              let value = description["value"] as? NSNumber
-        else { return nil }
-        return value.doubleValue
+        // 래퍼 형식: {"description": "...", "value": 숫자}
+        if let description = property as? [String: Any],
+           let value = description["value"] as? NSNumber {
+            return value.doubleValue
+        }
+        // bare 형식: 사용자가 설명 키를 지우고 값만 남긴 경우 — 경고 없이 받아들인다.
+        if let bare = property as? NSNumber {
+            return bare.doubleValue
+        }
+        return nil
     }
 
     static func clampedPolling(_ raw: Double) -> Double {
@@ -162,15 +160,14 @@ private extension AppConfig {
     }
 
     static func stages(from any: Any?) -> [ColorStage] {
-        guard let stages = (any as? [String: Any])?["value"] as? [[String: Any]] else {
-            return AppConfig.defaultColorStages
-        }
-        let parsed = stages.compactMap { entry -> ColorStage? in
+        // 래퍼 형식과 bare 배열 둘 다 받는다. 정렬은 init이 책임진다.
+        let raw = ((any as? [String: Any])?["value"] ?? any) as? [[String: Any]]
+        let parsed = (raw ?? []).compactMap { entry -> ColorStage? in
             guard let minimum = entry["remaining_at_least"] as? Double,
                   let hex = entry["hex"] as? String,
                   let rgb = RGB(hex: hex) else { return nil }
             return ColorStage(minimumRemaining: min(max(minimum, 0), 1), rgb: rgb)
         }
-        return parsed.isEmpty ? AppConfig.defaultColorStages : parsed.sorted { $0.minimumRemaining > $1.minimumRemaining }
+        return parsed.isEmpty ? AppConfig.defaultColorStages : parsed
     }
 }

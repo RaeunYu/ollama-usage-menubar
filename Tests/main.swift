@@ -261,7 +261,7 @@ await test("사용량 조회는 Bearer 키로 /api/usage를 호출해 스냅샷�
     let client = makeClient(apiKey: "k-test", statusCode: 200, body: Data(observedUsageJSON.utf8), recording: recording)
     let outcome = await client.fetchUsage()
 
-    guard case let .snapshot(snapshot) = outcome else {
+    guard case let .snapshot(snapshot, _) = await client.fetchUsage() else {
         throw CheckError(message: "정상 응답 → .snapshot 이어야 함: \(outcome)")
     }
     try check(snapshot.usageRatio, 0.002, "실측 응답의 사용 비율")
@@ -289,6 +289,24 @@ await test("상태 코드와 키 상태를 구분해 보고한다") {
     let empty = makeClient(apiKey: "", statusCode: 200, body: Data(observedUsageJSON.utf8), recording: recording)
     try check(await empty.fetchUsage(), UsageClient.Outcome.invalidKey, "빈 키 → 키 문제")
     try check(recording.requests.count, before, "빈 키면 새 요청 없음")
+}
+
+await test("설정 파일은 래퍼 없는 bare 값도 읽는다") {
+    let url = uniqueConfigURL()
+    try #"{"monthly_pool_usd": 300, "polling_interval_seconds": 120}"#.write(to: url, atomically: true, encoding: .utf8)
+    let config = AppConfig.loadOrCreate(at: url)
+    try check(config.monthlyPoolUSD, 300.0, "bare 풀 값")
+    try check(config.pollingIntervalSeconds, 120.0, "bare 폴링 값")
+}
+
+await test("사용량 조회 결과는 원문 JSON을 함께 돌려준다 (무문서 API 관측 창구)") {
+    let recording = Recording()
+    let client = makeClient(apiKey: "k", statusCode: 200, body: Data(observedUsageJSON.utf8), recording: recording)
+    guard case let .snapshot(snapshot, rawJSON) = await client.fetchUsage() else {
+        throw CheckError(message: "정상 응답 → .snapshot 이어야 함")
+    }
+    try check(String(decoding: rawJSON, as: UTF8.self), observedUsageJSON, "원문 JSON 그대로 전달")
+    try check(snapshot.usageRatio, 0.002, "스냅샷도 정상 파싱")
 }
 
 if failedCount > 0 {

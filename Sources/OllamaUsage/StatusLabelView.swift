@@ -48,6 +48,7 @@ struct StatusLabelView: View {
         }
         switch phase {
         case .invalidKey: return .orange
+        case .rateLimited: return .orange // 백오프 중 — 로딩(회색 …)과 구분
         case .failed: return .red
         default: return .secondary
         }

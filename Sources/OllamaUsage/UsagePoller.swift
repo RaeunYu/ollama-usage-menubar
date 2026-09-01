@@ -20,6 +20,8 @@ final class UsagePoller: ObservableObject {
     @Published private(set) var phase: Phase = .loading
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var config = AppConfig()
+    /// 마지막으로 받은 /api/usage 응답 원문 — 무문서 API 관측 창구(ADR-0001).
+    @Published private(set) var lastRawJSON: Data?
 
     let configURL: URL
 
@@ -54,14 +56,15 @@ final class UsagePoller: ObservableObject {
         config = loaded
 
         let client = UsageClient(
-            apiKeyProvider: { APIKeyStore.load() ?? "" },
+            apiKeyProvider: { APIKeyStore.load() },
             perform: UsageClient.urlSessionTransport()
         )
         let outcome = await client.fetchUsage()
 
         switch outcome {
-        case .snapshot(let snapshot):
+        case .snapshot(let snapshot, let rawJSON):
             phase = .snapshot(snapshot)
+            lastRawJSON = rawJSON
             lastUpdated = Date()
             rateLimitedStreak = 0
         case .exhausted:

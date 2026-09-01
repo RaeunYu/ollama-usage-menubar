@@ -3,7 +3,7 @@ import Foundation
 
 /// API 키는 Keychain에만 둔다(ADR-0003). 설정 파일·코드·테스트에 넣지 않는다.
 enum APIKeyStore {
-    private static var baseQuery: [String: Any] {
+    private static var base: [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "com.yulaeun.ollama-usage-menubar",
@@ -15,7 +15,6 @@ enum APIKeyStore {
         var query = base
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: CFTypeRef?
         var out: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess,
               let data = out as? Data,
@@ -34,14 +33,6 @@ enum APIKeyStore {
     }
 
     static func delete() {
-        SecItemDelete(baseQuery as CFDictionary)
-    }
-
-    private static var base: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.yulaeun.ollama-usage-menubar",
-            kSecAttrAccount as String: "ollama-api-key",
-        ]
+        SecItemDelete(base as CFDictionary)
     }
 }

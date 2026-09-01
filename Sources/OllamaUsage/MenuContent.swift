@@ -26,6 +26,13 @@ struct MenuContent: View {
             Button("설정 파일 열기") {
                 NSWorkspace.shared.open(poller.configURL)
             }
+            Button("원문 JSON 복사") {
+                if let raw = poller.lastRawJSON {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(String(decoding: raw, as: UTF8.self), forType: .string)
+                }
+            }
+            .disabled(poller.lastRawJSON == nil)
             Divider()
             Button("Ollama 설정 페이지") {
                 if let url = URL(string: "https://ollama.com/settings") {

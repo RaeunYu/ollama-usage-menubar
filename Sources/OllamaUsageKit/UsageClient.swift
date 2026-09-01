@@ -7,7 +7,8 @@ import Foundation
 public struct UsageClient: Sendable {
 
     public enum Outcome: Equatable, Sendable {
-        case snapshot(UsageSnapshot)
+        /// rawJSON — 무문서 API 관측을 지속하는 창구(ADR-0001). 표시에는 쓰지 않는다.
+        case snapshot(UsageSnapshot, rawJSON: Data)
         /// 402 — 제공 크레딧 소진. 오류가 아니라 정상 상태다(CONTEXT.md: 소진).
         case exhausted
         case invalidKey
@@ -64,7 +65,7 @@ public struct UsageClient: Sendable {
                 guard let snapshot = try? UsageSnapshot.decode(from: data) else {
                     return .failed(reason: "응답을 읽을 수 없음")
                 }
-                return .snapshot(snapshot)
+                return .snapshot(snapshot, rawJSON: data)
             case 401:
                 return .invalidKey
             case 402:

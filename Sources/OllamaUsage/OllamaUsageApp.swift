@@ -36,6 +36,10 @@ struct SettingsView: View {
     @State private var apiKey = ""
     @State private var status: String?
 
+    private var trimmedKey: String {
+        apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Ollama API 키")
@@ -49,12 +53,11 @@ struct SettingsView: View {
 
             HStack {
                 Button("저장") {
-                    let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                    APIKeyStore.save(trimmed)
+                    APIKeyStore.save(trimmedKey)
                     apiKey = ""
                     status = "키체인에 저장했습니다."
                 }
-                .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(trimmedKey.isEmpty)
 
                 Button("삭제", role: .destructive) {
                     APIKeyStore.delete()
