@@ -69,6 +69,14 @@ public struct AppConfig: Equatable, Sendable {
         return sorted.first { ratio >= $0.minimumRemaining } ?? sorted.last
     }
 
+    /// 설정 파일 표준 위치
+    public static var defaultURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/OllamaUsage")
+            .appendingPathComponent("config.json")
+    }
+
+    /// 설정 파일이 없으면 기본값으로 만들고 기본값을 돌려준다. 있으면 읽어서 돌려준다.
     /// 설정 파일이 없으면 기본값으로 만들고 기본값을 돌려준다. 있으면 읽어서 돌려준다.
     /// 파일이 깨져 있으면 기본값을 돌려주되 파일은 절대 건드리지 않는다(사용자 파일 파괴 금지).
     public static func loadOrCreate(at url: URL) -> AppConfig {
