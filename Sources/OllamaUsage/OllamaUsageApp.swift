@@ -18,7 +18,9 @@ struct OllamaUsageApp: App {
         MenuBarExtra {
             MenuContent(poller: poller)
         } label: {
-            StatusLabelView(phase: poller.phase, config: poller.config)
+            Image(nsImage: StatusLabelRenderer.image(phase: poller.phase, config: poller.config))
+                .renderingMode(.original) // 템플릿 변환 방지 — 단계 색상을 그대로
+                .accessibilityLabel("Ollama Usage")
         }
         .menuBarExtraStyle(.window)
 

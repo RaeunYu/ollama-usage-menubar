@@ -2,16 +2,22 @@ import SwiftUI
 import OllamaUsageKit
 
 /// 메뉴바 라벨 — 잔여 %(텍스트) + progress bar(그래픽). 확정 스펙: 둘을 함께 표시.
+///
+/// 이 뷰는 항상 오프스크린 이미지로 렌더링된다(StatusLabelRenderer). ImageRenderer에서
+/// `.primary`가 컬러 스킴을 따르지 않으므로, 글자·트랙 색은 labelColor로 명시한다.
 struct StatusLabelView: View {
     let phase: UsagePoller.Phase
     let config: AppConfig
+    /// 다크 배경이면 흰색, 라이트 배경이면 검정
+    var labelColor: Color = .white
 
     var body: some View {
         HStack(spacing: 5) {
             Text(percentText)
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
-            UsageBar(ratio: ratio, color: color)
+                .foregroundStyle(labelColor)
+            UsageBar(ratio: ratio, color: color, trackColor: labelColor.opacity(0.22))
         }
         .fixedSize()
     }
@@ -53,11 +59,12 @@ struct StatusLabelView: View {
 struct UsageBar: View {
     let ratio: Double?
     let color: Color
+    var trackColor: Color = Color.primary.opacity(0.22)
 
     var body: some View {
         ZStack(alignment: .leading) {
             Capsule()
-                .fill(Color.primary.opacity(0.22))
+                .fill(trackColor)
             if let ratio {
                 Capsule()
                     .fill(color)
