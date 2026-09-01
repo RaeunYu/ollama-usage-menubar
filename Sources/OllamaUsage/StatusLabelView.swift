@@ -7,11 +7,13 @@ struct StatusLabelView: View {
     let config: AppConfig
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             Text(percentText)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
             UsageBar(ratio: ratio, color: color)
         }
+        .fixedSize()
     }
 
     private var snapshot: UsageSnapshot? {
@@ -46,19 +48,23 @@ struct StatusLabelView: View {
     }
 }
 
-/// 제공 크레딧 대비 잔여를 채운 가로 막대
+/// 제공 크레딧 대비 잔여를 채운 가로 막대 — 메뉴바 소재 위에서도 확실히 보이게
+/// 트랙은 명시적 대비 색을 쓰고(이전의 .quaternary는 사실상 보이지 않았다), 크기를 고정한다.
 struct UsageBar: View {
     let ratio: Double?
     let color: Color
 
     var body: some View {
         ZStack(alignment: .leading) {
-            Capsule().fill(.quaternary)
+            Capsule()
+                .fill(Color.primary.opacity(0.22))
             if let ratio {
-                Capsule().fill(color).frame(width: max(3, 44 * ratio))
+                Capsule()
+                    .fill(color)
+                    .frame(width: max(4, 58 * ratio))
             }
         }
-        .frame(width: 44, height: 8)
+        .frame(width: 58, height: 10)
     }
 }
 

@@ -6,6 +6,9 @@ struct OllamaUsageApp: App {
     @StateObject private var poller: UsagePoller
 
     init() {
+        if LabelPreview.renderAndExitIfRequested() {
+            exit(0)
+        }
         let poller = UsagePoller(configURL: AppConfig.defaultURL)
         poller.start()
         _poller = StateObject(wrappedValue: poller)
