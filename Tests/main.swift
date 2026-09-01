@@ -140,6 +140,84 @@ private func checkNear(_ actual: Double?, _ expected: Double, _ label: String) t
     }
 }
 
+// MARK: - 설정 파일 seam
+
+@MainActor private func uniqueConfigURL() -> URL {
+    let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("ollama-usage-tests-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir.appendingPathComponent("config.json")
+}
+
+test("설정 파일이 없으면 기본값으로 만들어 돌려준다") {
+    let url = uniqueConfigURL()
+    let config = AppConfig.loadOrCreate(at: url)
+
+    try check(FileManager.default.fileExists(atPath: url.path), true, "기본 파일 생성")
+    try check(config.monthlyPoolUSD, 60.0, "기본 제공 크레딧 ($60 — 사용자 플랜)")
+    try check(config.pollingIntervalSeconds, 60.0, "기본 폴링 간격")
+
+    // 생성된 파일은 스스로를 설명한다 (한국어 description)
+    let written = try String(contentsOf: url, encoding: .utf8)
+    try check(written.contains("description"), true, "description 키 존재")
+    try check(written.contains("제공 크레딧"), true, "한국어 설명 존재")
+
+    // 다시 읽어도 같은 값
+    let reloaded = AppConfig.loadOrCreate(at: url)
+    try check(reloaded, config, "재로드 일관성")
+}
+
+test("사용자가 고친 값과 색상 단계가 그대로 읽힌다") {
+    let url = uniqueConfigURL()
+    let custom = """
+    {
+        "monthly_pool_usd": {"description": "제공 크레딧", "value": 300},
+        "polling_interval_seconds": {"description": "폴링 간격", "value": 120},
+        "color_stages": {
+            "description": "구간별 색상",
+            "value": [
+                {"remaining_at_least": 0.8, "hex": "#028384"},
+                {"remaining_at_least": 0.0, "hex": "#000000"}
+            ]
+        }
+    }
+    """
+    try custom.write(to: url, atomically: true, encoding: .utf8)
+
+    let config = AppConfig.loadOrCreate(at: url)
+    try check(config.monthlyPoolUSD, 300.0, "제공 크레딧 300")
+    try check(config.pollingIntervalSeconds, 120.0, "폴링 120초")
+    try check(config.colorStages.count, 2, "단계 수")
+    try check(config.stage(forRemaining: 0.9)?.rgb, AppConfig.RGB(hex: "#028384"), "0.9 → 첫 단계 색")
+    try check(config.stage(forRemaining: 0.5)?.rgb, AppConfig.RGB(hex: "#000000")!, "0.8 미만 → 둘째 단계")
+}
+
+test("폴링 간격은 10..300으로 고정된다") {
+    let wide = uniqueConfigURL()
+    try #"{"polling_interval_seconds": {"value": 9999}}"#.write(to: wide, atomically: true, encoding: .utf8)
+    try check(AppConfig.loadOrCreate(at: wide).pollingIntervalSeconds, 300.0, "너무 큰 폴링 → 300")
+
+    let narrow = uniqueConfigURL()
+    try #"{"polling_interval_seconds": {"value": 3}}"#.write(to: narrow, atomically: true, encoding: .utf8)
+    try check(AppConfig.loadOrCreate(at: narrow).pollingIntervalSeconds, 10.0, "너무 짧은 폴링 → 10")
+}
+
+test("잘못된 색상 단계는 기본 팔레트로 돌아간다") {
+    let url = uniqueConfigURL()
+    try #"{"color_stages": {"value": [{"remaining_at_least": 0.4, "hex": "zzz"}]}}"#.write(to: url, atomically: true, encoding: .utf8)
+    let config = AppConfig.loadOrCreate(at: url)
+    try check(config.colorStages, AppConfig.defaultColorStages, "hex가 깨진 단계 → 기본 팔레트")
+}
+
+test("전체가 깨진 JSON이면 기본값을 돌려주되 사용자 파일은 그대로 둔다") {
+    let url = uniqueConfigURL()
+    try "{broken".write(to: url, atomically: true, encoding: .utf8)
+    let config = AppConfig.loadOrCreate(at: url)
+    try check(config, AppConfig(), "깨진 JSON → 기본값")
+    let stillBroken = try String(contentsOf: url, encoding: .utf8)
+    try check(stillBroken == "{broken", true, "파일을 건드리지 않음")
+}
+
 if failedCount > 0 {
     print("\n실패 \(failedCount)건")
     exit(1)
