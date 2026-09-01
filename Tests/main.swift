@@ -14,9 +14,9 @@ private struct CheckError: Error, CustomStringConvertible {
 
 private var failedCount = 0
 
-@MainActor private func test(_ name: String, _ body: () throws -> Void) {
+@MainActor private func test(_ name: String, _ body: () async throws -> Void) async {
     do {
-        try body()
+        try await body()
         print("✔ \(name)")
     } catch {
         failedCount += 1
@@ -65,7 +65,7 @@ private let observedUsageJSON = """
 }
 """
 
-test("실측 /api/usage 응답이 UsageSnapshot으로 디코드된다") {
+await test("실측 /api/usage 응답이 UsageSnapshot으로 디코드된다") {
     let snapshot = try UsageSnapshot.decode(from: Data(observedUsageJSON.utf8))
 
     try check(snapshot.usageRatio, 0.002, "사용 비율")
@@ -84,7 +84,7 @@ test("실측 /api/usage 응답이 UsageSnapshot으로 디코드된다") {
     )
 }
 
-test("깨진·빠진 필드가 있어도 스냅샷 전체는 실패하지 않는다 (무문서 API 대응)") {
+await test("깨진·빠진 필드가 있어도 스냅샷 전체는 실패하지 않는다 (무문서 API 대응)") {
     // limits가 통째로 없어도 디코드된다 (ADR-0001)
     let noLimits = try UsageSnapshot.decode(from: Data(#"{"activity": {"cost": "0.5"}}"#.utf8))
     try check(noLimits.usageRatio, Optional<Double>.none, "usage 누락 → nil")
@@ -104,7 +104,7 @@ test("깨진·빠진 필드가 있어도 스냅샷 전체는 실패하지 않는
     try check(unknown.models.first?.requestCount, 7, "request_count 파싱")
 }
 
-test("잔여 비율은 1 − 사용 비율이고, 잔여 크레딧은 제공 크레딧과의 곱이다") {
+await test("잔여 비율은 1 − 사용 비율이고, 잔여 크레딧은 제공 크레딧과의 곱이다") {
     let snapshot = try UsageSnapshot.decode(from: Data(observedUsageJSON.utf8))
 
     // 사용 비율 0.002 → 잔여 비율 0.998 (독립 계산: 1 − 0.002)
@@ -112,7 +112,7 @@ test("잔여 비율은 1 − 사용 비율이고, 잔여 크레딧은 제공 크
     try checkNear(snapshot.remainingCredits(pool: 60), 59.88, "잔여 크레딧 ($60 풀 기준)")
 }
 
-test("사용 비율이 범위를 벗어나면 잔여 비율은 0..1로 고정된다") {
+await test("사용 비율이 범위를 벗어나면 잔여 비율은 0..1로 고정된다") {
     // extra usage 로 풀을 넘어 쓴 경우 (소진 이상)
     let over = try UsageSnapshot.decode(from: Data(#"{"limits":{"monthly":{"usage":1.2,"models":[]}}}"#.utf8))
     try check(over.remainingRatio, 0.0, "풀 초과 사용 → 잔여 0")
@@ -120,7 +120,7 @@ test("사용 비율이 범위를 벗어나면 잔여 비율은 0..1로 고정된
     try check(garbage.remainingRatio, 1.0, "비정상 음수 비율 → 잔여 1")
 }
 
-test("갱신 예정일은 기간 종료의 날짜(YYYY-MM-DD)뿐이다") {
+await test("갱신 예정일은 기간 종료의 날짜(YYYY-MM-DD)뿐이다") {
     let snapshot = try UsageSnapshot.decode(from: Data(observedUsageJSON.utf8))
     try check(snapshot.resetDate, "2026-09-01", "실측 응답의 갱신 예정일")
 
@@ -149,7 +149,7 @@ private func checkNear(_ actual: Double?, _ expected: Double, _ label: String) t
     return dir.appendingPathComponent("config.json")
 }
 
-test("설정 파일이 없으면 기본값으로 만들어 돌려준다") {
+await test("설정 파일이 없으면 기본값으로 만들어 돌려준다") {
     let url = uniqueConfigURL()
     let config = AppConfig.loadOrCreate(at: url)
 
@@ -167,7 +167,7 @@ test("설정 파일이 없으면 기본값으로 만들어 돌려준다") {
     try check(reloaded, config, "재로드 일관성")
 }
 
-test("사용자가 고친 값과 색상 단계가 그대로 읽힌다") {
+await test("사용자가 고친 값과 색상 단계가 그대로 읽힌다") {
     let url = uniqueConfigURL()
     let custom = """
     {
@@ -192,7 +192,7 @@ test("사용자가 고친 값과 색상 단계가 그대로 읽힌다") {
     try check(config.stage(forRemaining: 0.5)?.rgb, AppConfig.RGB(hex: "#000000")!, "0.8 미만 → 둘째 단계")
 }
 
-test("폴링 간격은 10..300으로 고정된다") {
+await test("폴링 간격은 10..300으로 고정된다") {
     let wide = uniqueConfigURL()
     try #"{"polling_interval_seconds": {"value": 9999}}"#.write(to: wide, atomically: true, encoding: .utf8)
     try check(AppConfig.loadOrCreate(at: wide).pollingIntervalSeconds, 300.0, "너무 큰 폴링 → 300")
@@ -202,20 +202,93 @@ test("폴링 간격은 10..300으로 고정된다") {
     try check(AppConfig.loadOrCreate(at: narrow).pollingIntervalSeconds, 10.0, "너무 짧은 폴링 → 10")
 }
 
-test("잘못된 색상 단계는 기본 팔레트로 돌아간다") {
+await test("잘못된 색상 단계는 기본 팔레트로 돌아간다") {
     let url = uniqueConfigURL()
     try #"{"color_stages": {"value": [{"remaining_at_least": 0.4, "hex": "zzz"}]}}"#.write(to: url, atomically: true, encoding: .utf8)
     let config = AppConfig.loadOrCreate(at: url)
     try check(config.colorStages, AppConfig.defaultColorStages, "hex가 깨진 단계 → 기본 팔레트")
 }
 
-test("전체가 깨진 JSON이면 기본값을 돌려주되 사용자 파일은 그대로 둔다") {
+await test("전체가 깨진 JSON이면 기본값을 돌려주되 사용자 파일은 그대로 둔다") {
     let url = uniqueConfigURL()
     try "{broken".write(to: url, atomically: true, encoding: .utf8)
     let config = AppConfig.loadOrCreate(at: url)
     try check(config, AppConfig(), "깨진 JSON → 기본값")
     let stillBroken = try String(contentsOf: url, encoding: .utf8)
     try check(stillBroken == "{broken", true, "파일을 건드리지 않음")
+}
+
+// MARK: - API 클라이언트 seam (시스템 경계 — perform 클로저로 URLSession을 대역한다)
+
+private final class Recording: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _requests: [URLRequest] = []
+
+    func record(_ request: URLRequest) {
+        lock.lock(); defer { lock.unlock() }
+        _requests.append(request)
+    }
+
+    var requests: [URLRequest] {
+        lock.lock(); defer { lock.unlock() }
+        return _requests
+    }
+}
+
+@MainActor private func makeClient(
+    apiKey: String,
+    statusCode: Int,
+    body: Data,
+    recording: Recording
+) -> UsageClient {
+    UsageClient(
+        apiKeyProvider: { apiKey },
+        perform: { request in
+            recording.record(request)
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (body, response)
+        }
+    )
+}
+
+await test("사용량 조회는 Bearer 키로 /api/usage를 호출해 스냅샷을 돌려준다") {
+    let recording = Recording()
+    let client = makeClient(apiKey: "k-test", statusCode: 200, body: Data(observedUsageJSON.utf8), recording: recording)
+    let outcome = await client.fetchUsage()
+
+    guard case let .snapshot(snapshot) = outcome else {
+        throw CheckError(message: "정상 응답 → .snapshot 이어야 함: \(outcome)")
+    }
+    try check(snapshot.usageRatio, 0.002, "실측 응답의 사용 비율")
+    try check(recording.requests.first?.url?.absoluteString, "https://ollama.com/api/usage", "엔드포인트")
+    try check(recording.requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer k-test", "Bearer 인증 헤더")
+}
+
+await test("상태 코드와 키 상태를 구분해 보고한다") {
+    let recording = Recording()
+
+    // 401 — 키 문제
+    let unauthorized = makeClient(apiKey: "wrong", statusCode: 401, body: Data("{}".utf8), recording: recording)
+    try check(await unauthorized.fetchUsage(), UsageClient.Outcome.invalidKey, "401 → 키 문제")
+
+    // 402 — 소진 (정상 상태, 오류 아님)
+    let exhausted = makeClient(apiKey: "k", statusCode: 402, body: Data(#"{"error":"balance empty"}"#.utf8), recording: recording)
+    try check(await exhausted.fetchUsage(), UsageClient.Outcome.exhausted, "402 → 소진")
+
+    // 429 — 백오프 대상
+    let limited = makeClient(apiKey: "k", statusCode: 429, body: Data(), recording: recording)
+    try check(await limited.fetchUsage(), UsageClient.Outcome.rateLimited, "429 → 백오프")
+
+    // 키가 비어 있으면 네트워크를 치지 않는다
+    let before = recording.requests.count
+    let empty = makeClient(apiKey: "", statusCode: 200, body: Data(observedUsageJSON.utf8), recording: recording)
+    try check(await empty.fetchUsage(), UsageClient.Outcome.invalidKey, "빈 키 → 키 문제")
+    try check(recording.requests.count, before, "빈 키면 새 요청 없음")
 }
 
 if failedCount > 0 {
