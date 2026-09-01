@@ -5,6 +5,7 @@ Ollama Cloud 크레딧 사용량을 메뉴바에 표시하는 개인용 macOS �
 ## 문서 포인터
 
 - **도메인 용어**는 `CONTEXT.md` — 용어를 쓰거나 새로 만들 때 먼저 맞춘다.
+- **확정 스펙**은 `docs/spec/mvp.md` — 요구사항 범위를 판단할 때 기준으로 삼는다.
 - **API 사실(스키마·엔드포인트·무문서 리스크)**은 `docs/research/ollama-cloud-usage-credits-api.md` — 사용량 데이터 소스를 건드리는 작업이면 먼저 읽는다.
 - **"왜 이렇게?" 의문이 드는 구조**는 `docs/adr/` — 코드를 고치려다 놀랐다면 ADR부터 읽는다.
 
