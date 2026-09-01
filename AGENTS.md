@@ -11,13 +11,13 @@ Ollama Cloud 크레딧 사용량을 메뉴바에 표시하는 개인용 macOS �
 ## 작업 방식
 
 - 동작 추가는 `tdd` 스킬의 red→green 슬라이스로 한다. 테스트는 아래 합의된 seam에서만 쓴다.
-- 완료 기준: `swift build && swift test` 통과.
+- 완료 기준: `swift build && swift run usage-tests` 통과 (exit 0).
 
 ## 빌드·실행
 
-- `swift build` / `swift test`
+- `swift build` / `swift run usage-tests`
 - 앱 번들: `scripts/make-app.sh` → `.build/Ollama Usage.app`
-- 테스트 프레임워크: swift-testing (`import Testing`)
+- 테스트: 자체 마이크로 러너(ADR-0005) — 이 CLT 툴체인(Swift 6.0.2)에 XCTest·swift-testing 내장이 모두 없어서다.
 
 ## 환경 함정
 

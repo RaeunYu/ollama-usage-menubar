@@ -1,0 +1,3 @@
+# 자체 마이크로 테스트 러너를 쓴다 (swift test 대신 `swift run usage-tests`)
+
+이 환경의 CommandLineTools 툴체인(Swift 6.0.2)에는 XCTest 모듈과 swift-testing 모듈이 모두 빠져 있어 `swift test`가 러너 단계에서 실패한다(모듈 자체가 없음 — `no such module 'XCTest'`/'Testing'). 표준 프레임워크를 부르기 위해 구형 Xcode 13.3.1(SDK 12.3)로 내려가는 것은 MenuBarExtra(macOS 13 API)를 못 쓰게 되므로 배제했고, 대신 최소 테스트 러너를 패키지 안 실행 타깃(`Tests/main.swift`, `swift run usage-tests`)으로 둔다. 실패 시 exit 1 — 완료 기준은 `swift build && swift run usage-tests` 통과다. 전체 Xcode 툴체인으로 갈아탈 때는 표준 swift-testing으로 되돌린다.

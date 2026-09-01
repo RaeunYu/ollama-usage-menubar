@@ -16,5 +16,11 @@ let package = Package(
             name: "OllamaUsage",
             dependencies: ["OllamaUsageKit"]
         ),
+        // 마이크로 테스트 러너 — CLT 툴체인에 XCTest·swift-testing 내장이 모두 없어서다(ADR-0005).
+        .executableTarget(
+            name: "usage-tests",
+            dependencies: ["OllamaUsageKit"],
+            path: "Tests"
+        ),
     ]
 )
