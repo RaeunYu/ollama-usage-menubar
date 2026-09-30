@@ -59,9 +59,12 @@ struct MenuContent: View {
             let pool = poller.config.monthlyPoolUSD
             remainingRow(snapshot, pool: pool)
             row("제공 크레딧", String(format: "$%.2f", pool))
-            if let reset = snapshot.resetDate {
-                row("갱신 예정일", reset)
-            }
+            // 갱신 예정일은 API가 아니라 구독 시작일(설정 파일) 기준 청구 주기로 계산한다 (ADR-0007).
+            let reset = BillingCycle.nextResetDate(
+                anchorDay: poller.config.billingDayOfMonth,
+                today: Date()
+            )
+            row("갱신 예정일", reset ?? "—")
             if !snapshot.models.isEmpty {
                 Divider()
                 ForEach(Array(snapshot.models.enumerated()), id: \.offset) { _, model in

@@ -7,7 +7,7 @@
 
 - 소스: `GET https://ollama.com/api/usage`, `Authorization: Bearer <키>` — 무문서 API(ADR-0001). 디코딩은 필드 누락·추가·타입 변화에 관대하게.
 - 잔여 비율 = `1 − limits.monthly.usage` (서버 계산 비율 1순위 — 실측: 사용/제공 비율, ADR-0002). `activity.cost`는 표시에 쓰지 않는다.
-- 갱신 예정일 = `activity.period.ending_at`의 날짜 부분(YYYY-MM-DD)만 파싱. 리셋 주기(매월 1일)를 코드에 하드코드하지 않는다.
+- 갱신 예정일 = **갱신 기준일(설정 파일의 `billing_day_of_month`, 구독 시작일) 기준** 매월 같은 날. 그 달에 그 날이 없으면 그 달 마지막 날이고, 기준일 자체는 유지된다(`BillingCycle`). API의 `period`는 롤링 윈도우(끝 = 관측 시각)라 갱신일로 쓸 수 없다 ([ADR-0007](adr/0007-reset-date-from-billing-anchor.md)).
 
 ## 메뉴바
 
@@ -30,7 +30,7 @@
 
 - 위치 `~/Library/Application Support/OllamaUsage/config.json`, 첫 실행 시 기본 파일 생성.
 - **모든 속성에 한국어 `description` 키를 병기**해 사용자가 파일만 읽고도 이해하게 한다. 색상은 hex.
-- 필드: `monthly_pool_usd`, `polling_interval_seconds`(기본 60, 10~300으로 고정), `color_stages`(임계값+hex).
+- 필드: `monthly_pool_usd`, `polling_interval_seconds`(기본 60, 10~300으로 고정), `billing_day_of_month`(갱신 기준일 1~31, 기본 1), `color_stages`(임계값+hex).
 - 깨진 속성은 기본값으로 폴백. 전체가 깨진 JSON이면 기본값을 돌려주되 **사용자 파일을 절대 덮어쓰지 않는다**.
 - **API 키는 이 파일에 절대 저장하지 않는다**(ADR-0003 — Keychain 전용).
 

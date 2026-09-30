@@ -44,7 +44,7 @@ open ".build/Ollama Usage.app"
 }
 ```
 
-`polling_interval_seconds`(10~300초)와 `color_stages`(임계값+hex)도 같은 파일에서 바꿀 수 있고, 저장 즉시 다음 폴링에 반영됩니다.
+`polling_interval_seconds`(10~300초), `billing_day_of_month`(갱신 기준일 — 구독을 시작한 날), `color_stages`(임계값+hex)도 같은 파일에서 바꿀 수 있고, 저장 즉시 다음 폴링에 반영됩니다.
 
 ## 친구에게 전달하기 (zip)
 

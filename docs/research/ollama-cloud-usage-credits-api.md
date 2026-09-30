@@ -200,7 +200,7 @@ ollama/ollama 공식 GitHub 저장소(코드/이슈/PR), 그리고 ollama.com �
 실측이 확정/변경한 것:
 
 - **`limits.monthly`** — 스태프 PR #17421 과 서드파티 관측의 `limits{session, weekly}` 가 **실제로는 `limits.monthly{usage, models[]}` 로 바뀌어 있음을 확인**. 3.3 절의 추정 스키마는 개편 전 구조로 확정된다(참고용으로만).
-- `activity.period.type` 은 여전히 `"last_4_weeks"` 이며 `ending_at` 이 관측 시각과 일치해 롤링 윈도우로 보였으나, 후속 확인(사용자 보고, 2차 소스)에서 **공식 SNS 가 월간 리셋을 "매월 1일"로 공지**했다고 하며, 본 스냅샷의 `ending_at` 일자(2026-09-01)와 정확히 일치한다. → 앱은 갱신 예정일을 `period.ending_at` 의 `YYYY-MM-DD` 파싱으로 산출하기로 결정 (정책 변경 여지가 있으므로 리셋일을 하드코드하지 않는다).
+- `activity.period.type` 은 여전히 `"last_4_weeks"` 이며 `ending_at` 이 관측 시각과 일치해 롤링 윈도우로 보였으나, 후속 확인(사용자 보고, 2차 소스)에서 **공식 SNS 가 월간 리셋을 "매월 1일"로 공지**했다고 하며, 본 스냅샷의 `ending_at` 일자(2026-09-01)와 정확히 일치한다. → 처음에는 `period.ending_at` 을 갱신일로 쓰기로 했으나, **실사용에서 `ending_at` 이 항상 관측 시각(오늘)이라 갱신일로 쓸 수 없음이 확인됐다**. 공식 가격 FAQ 는 "구독을 시작한 날과 같은 날 매월 리셋"이라고 명시하므로, 앱은 설정 파일의 구독 시작일(`billing_day_of_month`) 기준으로 다음 갱신일을 계산한다 (ADR-0007 — `BillingCycle`).
 - **`limits.monthly.usage` 의 단위가 사용자 실측으로 확정**: 사용 크레딧 / 제공 크레딧 **비율**. 계정 소유자 관찰 — 제공 $60, 대시보드 사용량 $0.14 → 0.14/60 = 0.00233 ≈ 관측값 0.002 (스냅샷 시점 차이로 미세 오차). 따라서 잔여 비율 = `1 - limits.monthly.usage` 로 서버 값에서 직접 산출 가능하며, 달러 표시는 설정 파일의 풀 금액과 조합해 계산한다. `activity.cost` (소수 5자리 문자열) 는 금액으로 보이나 표시에는 서버 비율을 1순위로 쓰고, cost 는 raw JSON 디버그 뷰로 관찰을 지속한다.
 - `activity.models` 는 빈 배열로 관측됨(usage 총량이 작아서일 수 있음) — 모델별 내역은 `limits.monthly.models[].{name, request_count}` 쪽에 있었음.
 

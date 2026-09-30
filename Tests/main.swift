@@ -120,17 +120,58 @@ await test("사용 비율이 범위를 벗어나면 잔여 비율은 0..1로 고
     try check(garbage.remainingRatio, 1.0, "비정상 음수 비율 → 잔여 1")
 }
 
-await test("갱신 예정일은 기간 종료의 날짜(YYYY-MM-DD)뿐이다") {
-    let snapshot = try UsageSnapshot.decode(from: Data(observedUsageJSON.utf8))
-    try check(snapshot.resetDate, "2026-09-01", "실측 응답의 갱신 예정일")
+// MARK: - 갱신 예정일 (구독 시작일 기준 청구 주기)
 
-    // 자정 직전 종료도 UTC 날짜 기준으로 읽는다 (로컬 타임존으로 넘어가지 않게)
-    let lateNight = try UsageSnapshot.decode(from: Data(#"{"activity":{"period":{"ending_at":"2026-09-30T23:59:59.123Z"}}}"#.utf8))
-    try check(lateNight.resetDate, "2026-09-30", "UTC 날짜 기준")
+private let utcCalendar: Calendar = {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    return calendar
+}()
 
-    // 기간이 아예 없거나 깨져 있으면 nil
-    let missing = try UsageSnapshot.decode(from: Data(#"{"limits":{"monthly":{}}}"#.utf8))
-    try check(missing.resetDate, Optional<String>.none, "기간 누락 → nil")
+private func day(_ year: Int, _ month: Int, _ dayOfMonth: Int) -> Date {
+    utcCalendar.date(from: DateComponents(year: year, month: month, day: dayOfMonth, hour: 12))!
+}
+
+await test("갱신 예정일은 구독 시작일과 같은 날이고, 그 달에 없으면 그 달 마지막 날이다") {
+    // 5월 1일 결제 → 5월이 31일까지 있어도 다음 회차는 6월 1일
+    try check(BillingCycle.nextResetDate(anchorDay: 1, today: day(2026, 5, 1), calendar: utcCalendar), "2026-06-01", "결제일 당일 → 다음 달")
+    try check(BillingCycle.nextResetDate(anchorDay: 1, today: day(2026, 5, 15), calendar: utcCalendar), "2026-06-01", "월 중순 → 다음 달 같은 날")
+
+    // 8월 31일 결제 → 9월은 30일까지이므로 9월 30일
+    try check(BillingCycle.nextResetDate(anchorDay: 31, today: day(2026, 8, 31), calendar: utcCalendar), "2026-09-30", "31일 구독 + 30일까지인 다음 달")
+    // 기준일(31일)은 유지된다: 9월 30일 → 10월 31일
+    try check(BillingCycle.nextResetDate(anchorDay: 31, today: day(2026, 9, 30), calendar: utcCalendar), "2026-10-31", "보정 후에도 기준일 유지")
+
+    // 이번 달 기준일이 아직 안 왔으면 이번 달, 지났으면 다음 달
+    try check(BillingCycle.nextResetDate(anchorDay: 15, today: day(2026, 9, 10), calendar: utcCalendar), "2026-09-15", "이번 달 기준일")
+    try check(BillingCycle.nextResetDate(anchorDay: 15, today: day(2026, 9, 16), calendar: utcCalendar), "2026-10-15", "지난 기준일 → 다음 달")
+
+    // 2월 보정(평년/윤년)과 연 경계
+    try check(BillingCycle.nextResetDate(anchorDay: 31, today: day(2026, 1, 31), calendar: utcCalendar), "2026-02-28", "평년 2월 말일")
+    try check(BillingCycle.nextResetDate(anchorDay: 31, today: day(2028, 1, 31), calendar: utcCalendar), "2028-02-29", "윤년 2월 말일")
+    try check(BillingCycle.nextResetDate(anchorDay: 15, today: day(2026, 12, 20), calendar: utcCalendar), "2027-01-15", "연 경계")
+
+    // 범위 밖 기준일은 계산하지 않는다
+    try check(BillingCycle.nextResetDate(anchorDay: 0, today: day(2026, 9, 1), calendar: utcCalendar), Optional<String>.none, "0일 → nil")
+    try check(BillingCycle.nextResetDate(anchorDay: 32, today: day(2026, 9, 1), calendar: utcCalendar), Optional<String>.none, "32일 → nil")
+}
+
+await test("설정 파일의 갱신 기준일(구독 시작일)을 읽는다") {
+    let bare = uniqueConfigURL()
+    try #"{"billing_day_of_month": 25}"#.write(to: bare, atomically: true, encoding: .utf8)
+    try check(AppConfig.loadOrCreate(at: bare).billingDayOfMonth, 25, "bare 기준일")
+
+    let wrapped = uniqueConfigURL()
+    try #"{"billing_day_of_month": {"description": "구독 시작일", "value": 31}}"#.write(to: wrapped, atomically: true, encoding: .utf8)
+    try check(AppConfig.loadOrCreate(at: wrapped).billingDayOfMonth, 31, "래퍼 기준일")
+
+    let missing = uniqueConfigURL()
+    try #"{"monthly_pool_usd": 60}"#.write(to: missing, atomically: true, encoding: .utf8)
+    try check(AppConfig.loadOrCreate(at: missing).billingDayOfMonth, 1, "누락 → 기본 1일")
+
+    let outOfRange = uniqueConfigURL()
+    try #"{"billing_day_of_month": 45}"#.write(to: outOfRange, atomically: true, encoding: .utf8)
+    try check(AppConfig.loadOrCreate(at: outOfRange).billingDayOfMonth, 31, "범위 밖 → 31로 고정")
 }
 
 private func checkNear(_ actual: Double?, _ expected: Double, _ label: String) throws {
