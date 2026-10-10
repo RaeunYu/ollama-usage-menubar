@@ -1,8 +1,10 @@
 import SwiftUI
 import OllamaUsageKit
 
-/// 드롭다운 내용 — 확정 스펙:
-/// ① 총(제공) 크레딧(설정 파일) ② 잔여 크레딧 ③ 갱신 예정일 ④ 모델별 요청 수 (API)
+/// 드롭다운 내용 — 전부 Balance API가 주는 값으로 구성한다:
+/// ① 잔여 크레딧(+퍼센트) ② 제공 크레딧 ③ 플랜 시작일 ④ 플랜 초기화
+///
+/// 모델별 사용량 내역은 API 변경으로 사라졌다(/api/usage에서 제거, 어디에서도 확인 불가).
 struct MenuContent: View {
     @ObservedObject var poller: UsagePoller
     @Environment(\.openWindow) private var openWindow
@@ -17,7 +19,7 @@ struct MenuContent: View {
                 HStack {
                     Text("마지막 갱신")
                     Spacer()
-                    Text(Self.timeFormatter.string(from: updated))
+                    Text(Self.timeText(updated))
                         .foregroundStyle(.secondary).monospacedDigit()
                 }
             }
@@ -55,25 +57,16 @@ struct MenuContent: View {
                 Text("조회 중…").foregroundStyle(.secondary)
             }
 
-        case .snapshot(let snapshot):
-            let pool = poller.config.monthlyPoolUSD
-            remainingRow(snapshot, pool: pool)
-            row("제공 크레딧", String(format: "$%.2f", pool))
-            // 갱신 예정일은 API가 아니라 구독 시작일(설정 파일) 기준 청구 주기로 계산한다 (ADR-0007).
-            let reset = BillingCycle.nextResetDate(
-                anchorDay: poller.config.billingDayOfMonth,
-                today: Date()
-            )
-            row("갱신 예정일", reset ?? "—")
-            if !snapshot.models.isEmpty {
-                Divider()
-                ForEach(Array(snapshot.models.enumerated()), id: \.offset) { _, model in
-                    HStack {
-                        Text(model.name).lineLimit(1)
-                        Spacer()
-                        Text("\(model.requestCount)회").foregroundStyle(.secondary).monospacedDigit()
-                    }
-                }
+        case .balance(let snapshot):
+            remainingRow(snapshot)
+            if let allowance = snapshot.allowanceUSD {
+                row("제공 크레딧", String(format: "$%.2f", allowance))
+            }
+            if let start = snapshot.planStart {
+                row("플랜 시작일", Self.dateText(start))
+            }
+            if let reset = snapshot.planReset {
+                row("플랜 초기화", Self.dateText(reset))
             }
 
         case .exhausted:
@@ -94,15 +87,16 @@ struct MenuContent: View {
         }
     }
 
-    /// 1번 항목: 제공 크레딧(설정 파일) — 2번 항목: 잔여 크레딧(API) + 퍼센트
-    private func remainingRow(_ snapshot: UsageSnapshot, pool: Double) -> some View {
+    /// 잔여 크레딧(API) — 달러와 퍼센트를 함께, 색은 설정 파일의 단계 색
+    private func remainingRow(_ snapshot: BalanceSnapshot) -> some View {
         HStack {
             Text("잔여 크레딧")
             Spacer()
-            if let ratio = snapshot.remainingRatio,
-               let credits = snapshot.remainingCredits(pool: pool) {
-                Text("\(String(format: "$%.2f", credits)) · \(Int((ratio * 100).rounded()))%")
-                    .foregroundStyle(poller.config.stage(forRemaining: ratio)?.rgb.swiftColor ?? .primary)
+            if let remaining = snapshot.remainingUSD {
+                let ratio = snapshot.remainingRatio
+                let percent = ratio.map { " · \(Int(($0 * 100).rounded()))%" } ?? ""
+                Text("\(String(format: "$%.2f", remaining))\(percent)")
+                    .foregroundStyle(ratio.flatMap { poller.config.stage(forRemaining: $0)?.rgb.swiftColor } ?? .primary)
                     .monospacedDigit()
             } else {
                 Text("—").foregroundStyle(.secondary)
@@ -110,17 +104,23 @@ struct MenuContent: View {
         }
     }
 
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .medium
-        return formatter
-    }()
-
     private func row(_ title: String, _ value: String) -> some View {
         HStack {
             Text(title)
             Spacer()
             Text(value).foregroundStyle(.secondary).monospacedDigit()
         }
+    }
+
+    /// 시각은 사용자 로컬 기준 시:분:초로 보여준다 (마지막 갱신)
+    private static func timeText(_ date: Date) -> String {
+        let parts = Calendar.current.dateComponents([.hour, .minute, .second], from: date)
+        return String(format: "%02d:%02d:%02d", parts.hour ?? 0, parts.minute ?? 0, parts.second ?? 0)
+    }
+
+    /// 플랜 시작·초기화는 사용자 로컬 기준 날짜로 보여준다
+    private static func dateText(_ date: Date) -> String {
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
     }
 }

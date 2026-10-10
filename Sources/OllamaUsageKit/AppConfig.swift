@@ -1,8 +1,10 @@
 import Foundation
 
-/// 설정 파일 (CONTEXT.md) — API가 알려 주지 않는 값(제공 크레딧, 폴링 간격, 색상 단계)을
-/// 사용자가 직접 고친다. 모든 속성은 `{"description": 한국어 설명, "value": 값}` 형태로
-/// 스스로를 설명한다. API 키는 여기에 절대 넣지 않는다(ADR-0003).
+/// 설정 파일 (CONTEXT.md) — API가 알려 주지 않는 값(폴링 간격, 색상 단계)을 사용자가 직접 고친다.
+/// 모든 속성은 `{"description": 한국어 설명, "value": 값}` 형태로 스스로를 설명한다.
+/// API 키는 여기에 절대 넣지 않는다(ADR-0003).
+///
+/// 제공 크레딧·잔여 크레딧·플랜 주기는 Balance API가 알려 주므로 설정에 두지 않는다 (ADR-0008).
 public struct AppConfig: Equatable, Sendable {
 
     public struct ColorStage: Equatable, Sendable {
@@ -38,33 +40,23 @@ public struct AppConfig: Equatable, Sendable {
         }
     }
 
-    public static let defaultPoolUSD: Double = 60
     public static let defaultPollingIntervalSeconds: Double = 60
-    /// 구독을 시작한 날 — API가 알려 주지 않아 사용자가 설정한다.
-    public static let defaultBillingDayOfMonth = 1
     public static let defaultColorStages: [ColorStage] = [
         ColorStage(minimumRemaining: 0.5, rgb: RGB(hex: "#34C759")!),
         ColorStage(minimumRemaining: 0.2, rgb: RGB(hex: "#FF9F0A")!),
         ColorStage(minimumRemaining: 0.0, rgb: RGB(hex: "#FF453A")!),
     ]
 
-    /// 제공 크레딧 (Pool) — 항상 내림차순 정렬을 유지한다(stage 선택의 전제).
-    public let monthlyPoolUSD: Double
     /// 폴링 간격(초) — 10...300으로 고정한다.
     public let pollingIntervalSeconds: Double
-    /// 갱신 기준일(1...31) — 구독 시작일. 갱신 예정일 계산의 근거(BillingCycle).
-    public let billingDayOfMonth: Int
+    /// 항상 내림차순 정렬을 유지한다(stage 선택의 전제).
     public let colorStages: [ColorStage]
 
     public init(
-        monthlyPoolUSD: Double = AppConfig.defaultPoolUSD,
         pollingIntervalSeconds: Double = AppConfig.defaultPollingIntervalSeconds,
-        billingDayOfMonth: Int = AppConfig.defaultBillingDayOfMonth,
         colorStages: [ColorStage] = AppConfig.defaultColorStages
     ) {
-        self.monthlyPoolUSD = monthlyPoolUSD
-        self.pollingIntervalSeconds = pollingIntervalSeconds
-        self.billingDayOfMonth = min(max(billingDayOfMonth, 1), 31)
+        self.pollingIntervalSeconds = min(max(pollingIntervalSeconds, 10), 300)
         self.colorStages = colorStages.sorted { $0.minimumRemaining > $1.minimumRemaining }
     }
 
@@ -107,9 +99,7 @@ public struct AppConfig: Equatable, Sendable {
             return nil
         }
         return AppConfig(
-            monthlyPoolUSD: max(numberValue(root["monthly_pool_usd"]) ?? defaultPoolUSD, 0),
-            pollingIntervalSeconds: clampedPolling(numberValue(root["polling_interval_seconds"]) ?? defaultPollingIntervalSeconds),
-            billingDayOfMonth: Int(numberValue(root["billing_day_of_month"]) ?? Double(defaultBillingDayOfMonth)),
+            pollingIntervalSeconds: numberValue(root["polling_interval_seconds"]) ?? defaultPollingIntervalSeconds,
             colorStages: stages(from: root["color_stages"])
         )
     }
@@ -125,17 +115,9 @@ public struct AppConfig: Equatable, Sendable {
 
     private var document: [String: Any] {
         [
-            "monthly_pool_usd": [
-                "description": "제공 크레딧 — 플랜이 매월 부여하는 크레딧 총액(달러). 예: Pro 60, Max 300, Team 1000",
-                "value": monthlyPoolUSD,
-            ],
             "polling_interval_seconds": [
-                "description": "사용량을 다시 조회하는 간격(초). 10~300 사이로 맞춰진다.",
+                "description": "폴링 간격 — 잔액을 다시 조회하는 주기(초). 10~300 사이로 맞춰진다.",
                 "value": pollingIntervalSeconds,
-            ],
-            "billing_day_of_month": [
-                "description": "갱신 기준일 — 구독을 시작한 날(1~31). 매월 이 날에 크레딧이 리셋된다. 그 달에 그 날이 없으면 그 달 마지막 날이 기준이고, 기준일 자체는 바뀌지 않는다(예: 31일 구독 → 9월 30일, 10월 31일).",
-                "value": billingDayOfMonth,
             ],
             "color_stages": [
                 "description": "잔여 비율 구간별 메뉴바 색상. remaining_at_least 이상일 때 해당 hex 색을 쓰고, 목록 위에서부터 처음 맞는 것을 택한다.",
@@ -164,10 +146,6 @@ private extension AppConfig {
             return bare.doubleValue
         }
         return nil
-    }
-
-    static func clampedPolling(_ raw: Double) -> Double {
-        min(max(raw, 10), 300)
     }
 
     static func stages(from any: Any?) -> [ColorStage] {

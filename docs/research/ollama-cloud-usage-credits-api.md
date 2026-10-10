@@ -8,6 +8,8 @@ ollama/ollama 공식 GitHub 저장소(코드/이슈/PR), 그리고 ollama.com �
 -->
 # Ollama Cloud 사용량·크레딧 API 조사 (메뉴바 앱 기초 리서치)
 
+> ⚠️ **대체됨(2026-10-10)**: 여기 기록한 `/api/usage` 스키마(`activity{...}` + `limits{monthly}`)는 Ollama의 API 개편으로 공식 표면에서 사라졌다. 현재 사실은 **[ollama-cloud-balance-api.md](ollama-cloud-balance-api.md)** 를 읽어라. 이 문서는 개편 전 상태의 기록으로만 남긴다.
+
 > 접근일 명기: 아래 모든 링크의 접근일은 **2026-09-01 (UTC)** 이다. Ollama Cloud 가격·문서는 변동이 잦은 신생 문서이므로, 인용한 날짜 기준으로 읽을 것.
 
 ---

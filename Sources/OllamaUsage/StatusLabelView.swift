@@ -22,13 +22,13 @@ struct StatusLabelView: View {
         .fixedSize()
     }
 
-    private var snapshot: UsageSnapshot? {
-        if case .snapshot(let snapshot) = phase { return snapshot }
+    private var balance: BalanceSnapshot? {
+        if case .balance(let snapshot) = phase { return snapshot }
         return nil
     }
 
     private var percentText: String {
-        if let ratio = snapshot?.remainingRatio {
+        if let ratio = balance?.remainingRatio {
             return "\(Int((ratio * 100).rounded()))%"
         }
         switch phase {
@@ -36,14 +36,14 @@ struct StatusLabelView: View {
         case .exhausted: return "0%"
         case .invalidKey: return "키"
         case .failed: return "!"
-        case .snapshot: return "—" // 스냅샷인데 비율이 없는(무문서 API 스키마 변화) 경우
+        case .balance: return "—" // 잔액은 받았지만 비율을 만들 수 없는 경우(제공량 누락)
         }
     }
 
-    private var ratio: Double? { snapshot?.remainingRatio }
+    private var ratio: Double? { balance?.remainingRatio }
 
     private var color: Color {
-        if let ratio = snapshot?.remainingRatio {
+        if let ratio = balance?.remainingRatio {
             return config.stage(forRemaining: ratio)?.rgb.swiftColor ?? .accentColor
         }
         switch phase {
@@ -55,7 +55,7 @@ struct StatusLabelView: View {
     }
 }
 
-/// 제공 크레딧 대비 잔여를 채운 가로 막대 — 메뉴바 소재 위에서도 확실히 보이게
+/// 잔여 크레딧 비율을 채운 가로 막대 — 메뉴바 소재 위에서도 확실히 보이게
 /// 트랙은 명시적 대비 색을 쓰고(이전의 .quaternary는 사실상 보이지 않았다), 크기를 고정한다.
 struct UsageBar: View {
     let ratio: Double?

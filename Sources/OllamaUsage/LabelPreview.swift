@@ -14,13 +14,9 @@ enum LabelPreview {
 
         func label(remaining: Double) -> some View {
             StatusLabelView(
-                phase: .snapshot(UsageSnapshot(
-                    usageRatio: 1 - remaining,
-                    activityCost: "10.80",
-                    periodType: "last_4_weeks",
-                    periodStartRaw: "2026-08-10T00:00:00Z",
-                    periodEndRaw: "2026-09-01T00:00:00Z",
-                    models: []
+                phase: .balance(BalanceSnapshot(
+                    allowanceUSD: 60,
+                    remainingUSD: 60 * remaining
                 )),
                 config: config
             )

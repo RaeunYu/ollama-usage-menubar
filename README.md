@@ -1,22 +1,22 @@
 # Ollama Usage (menubar)
 
-Ollama Cloud 구독의 **크레딧 사용량을 macOS 메뉴바에서 실시간에 가깝게** 보여주는 개인용 앱입니다. 메뉴바에는 잔여 %와 progress bar가 함께 표시되고, 드롭다운에서 제공 크레딧·잔여 크레딧·갱신 예정일·모델별 요청 수를 확인할 수 있습니다.
+Ollama Cloud 구독의 **크레딧 잔액을 macOS 메뉴바에서 실시간에 가깝게** 보여주는 개인용 앱입니다. 메뉴바에는 잔여 %와 progress bar가 함께 표시되고, 드롭다운에서 잔여 크레딧·제공 크레딧·플랜 시작일·플랜 초기화를 확인할 수 있습니다.
 
-> Ollama Cloud가 2026-08-31에 GPU-time 과금에서 **토큰 단가 기반 크레딧 풀**로 요금제를 전환하면서, "이번 달 크레딧이 얼마나 남았나"를 한눈에 보고 싶어 만든 도구입니다. 이 전환 이후의 요금 구조와 사용량 조회 API에 대한 1차 소스 조사는 [docs/research/ollama-cloud-usage-credits-api.md](docs/research/ollama-cloud-usage-credits-api.md)에 정리되어 있습니다.
+> Ollama Cloud가 2026-08-31에 GPU-time 과금에서 **토큰 단가 기반 크레딧 풀**로 요금제를 전환하면서, "이번 달 크레딧이 얼마나 남았나"를 한눈에 보고 싶어 만든 도구입니다. 데이터 소스는 Ollama가 공식 문서화한 `GET /api/balance`이며, 엔드포인트·스키마·레이트 리밋에 대한 1차 소스 조사는 [docs/research/ollama-cloud-balance-api.md](docs/research/ollama-cloud-balance-api.md)에 정리되어 있습니다.
 
 ## 동작
 
 - **메뉴바**: 잔여 % 텍스트 + progress bar. 잔여 비율에 따라 색상 단계 적용 (≥50% 녹 / 20~49% 노랑 / <20% 빨강 — 임계값·색상은 설정 파일에서 변경 가능)
-- **드롭다운**: 잔여 크레딧(달러+%) · 제공 크레딧 · 갱신 예정일 · 모델별 요청 수
-- **폴링**: 기본 60초 + 메뉴를 열면 즉시 갱신 + `429` 지수 백오프(상한 10분)
-- **상태 구분**: 크레딧 소진(402) / API 키 문제(401) / 요청 과다(429) / 네트워크 실패를 서로 다르게 표시
+- **드롭다운**: 잔여 크레딧(달러+%) · 제공 크레딧 · 플랜 시작일 · 플랜 초기화
+- **폴링**: 기본 60초(서비스 권장값) + 메뉴를 열면 즉시 갱신 + `429` 지수 백오프(상한 10분)
+- **상태 구분**: 키 문제(401) · 계정 정지(403) · 요청 과다(429) · 잔액 조회 일시 불가(503) · 네트워크 실패를 서로 다르게 표시
 
-데이터 소스는 Ollama가 공식 문서화하지 않은 `GET https://ollama.com/api/usage`입니다. 스태프가 사용법을 공개한 엔드포인트를 직접 확인해 채택했고([ADR-0001](docs/adr/0001-undocumented-usage-api.md)), 스키마가 언제든 바뀔 수 있다는 전제로 파서를 필드 누락·추가·타입 변화에 관대하게 유지합니다.
+데이터 소스는 Balance API 하나입니다 — 잔액(`included.balance_usd`), 제공 크레딧(`included.allowance_usd`), 플랜 주기(`period.from`/`until`)를 모두 서버가 줍니다. 서버 API가 바뀌는 경우에 대비해 파서는 필드 누락·추가·타입 변화에 관대하게 유지하고, 드롭다운의 "원문 JSON 복사"로 실제 응답을 언제든 확인할 수 있습니다.
 
 ## 요구 사항
 
 - **Apple Silicon Mac, macOS 15 이상** (macOS 26 Tahoe에서 개발·검증)
-- **Ollama 계정과 API 키** — [ollama.com/settings/keys](https://ollama.com/settings/keys)에서 발급. 무료 플랜(starter 크레딧)으로도 동작합니다. 단, Free 플랜은 제공 크레딧 금액이 비공개라 달러 환산 표시 대신 % 위주로 보입니다.
+- **Ollama 계정과 API 키** — [ollama.com/settings/keys](https://ollama.com/settings/keys)에서 발급. 무료 플랜도 동작합니다(표시되는 값은 API가 주는 제공량·잔액 그대로입니다).
 
 ## GitHub에서 받아 설치하기 (소스 빌드)
 
@@ -38,13 +38,13 @@ open ".build/Ollama Usage.app"
 설정 파일은 `~/Library/Application Support/OllamaUsage/config.json`에 자동 생성되며, 모든 속성에 한국어 설명이 달려 있습니다:
 
 ```json
-"monthly_pool_usd": {
-    "description": "제공 크레딧 — 플랜이 매월 부여하는 크레딧 총액(달러). 예: Pro 60, Max 300, Team 1000",
+"polling_interval_seconds": {
+    "description": "폴링 간격 — 잔액을 다시 조회하는 주기(초). 10~300 사이로 맞춰진다.",
     "value": 60
 }
 ```
 
-`polling_interval_seconds`(10~300초), `billing_day_of_month`(갱신 기준일 — 구독을 시작한 날), `color_stages`(임계값+hex)도 같은 파일에서 바꿀 수 있고, 저장 즉시 다음 폴링에 반영됩니다.
+`color_stages`(임계값+hex)도 같은 파일에서 바꿀 수 있고, 저장 즉시 다음 폴링에 반영됩니다.
 
 ## 친구에게 전달하기 (zip)
 
@@ -61,19 +61,21 @@ ditto -c -k --sequesterRsrc --keepParent ".build/Ollama Usage.app" ~/Desktop/Oll
 
 | 문서 | 내용 |
 |---|---|
-| [CONTEXT.md](CONTEXT.md) | 도메인 용어집 (크레딧, 제공 크레딧/Pool, 사용·잔여 비율, 갱신 예정일, 소진…) |
+| [CONTEXT.md](CONTEXT.md) | 도메인 용어집 (크레딧, 제공 크레딧, 잔여 비율·잔여 크레딧, 플랜 시작일·초기화, 소진…) |
 | [docs/spec/mvp.md](docs/spec/mvp.md) | 확정 스펙 (Spec 리뷰의 기준) |
-| [docs/research/](docs/research/ollama-cloud-usage-credits-api.md) | Ollama Cloud 요금 개편·사용량 API 1차 소스 조사 (엔드포인트 실측 스냅샷 포함) |
+| [docs/research/ollama-cloud-balance-api.md](docs/research/ollama-cloud-balance-api.md) | Balance API 공식 문서·스펙 1차 소스 조사 (스키마·레이트 리밋·레거시 분기) |
+| [docs/research/ollama-cloud-usage-credits-api.md](docs/research/ollama-cloud-usage-credits-api.md) | 2026-09 요금 개편 조사 (구 `/api/usage` 스키마 — 개편 전 기록) |
 | [docs/adr/](docs/adr/) | 설계 결정 기록 |
 
 아키텍처 결정 요약:
 
-- **무문서 API를 1차 데이터 소스로** — `/api/usage`는 공식 문서가 없지만 엔드포인트 실존이 확인된 엔드포인트. 스키마 변경에 관대한 파싱으로 대응 ([ADR-0001](docs/adr/0001-undocumented-usage-api.md))
-- **잔여 계산은 서버 값 단일 출처** — 서버가 주는 사용 비율을 그대로 쓰고, 앱이 직접 나누지 않는다 ([ADR-0002](docs/adr/0002-remaining-from-server-ratio.md))
+- **Balance API를 단일 데이터 소스로** — `/api/usage`는 기간별 통계라 목적에 맞지 않고, 모델별 내역은 어느 엔드포인트에도 없다 ([ADR-0008](docs/adr/0008-balance-api-single-source.md))
 - **API 키는 Keychain 전용** — 설정 파일에는 절대 저장하지 않는다 ([ADR-0003](docs/adr/0003-keychain-only-api-key.md))
 - **Xcode 프로젝트 없이 SPM + 번들 스크립트** ([ADR-0004](docs/adr/0004-spm-no-xcodeproj.md))
 - **자체 마이크로 테스트 러너** — CLT 툴체인에 XCTest·swift-testing이 모두 없어서 ([ADR-0005](docs/adr/0005-micro-test-runner.md))
 - **애드혹 서명** — 키체인 ACL 안정화를 위한 최소 코드사인 ([ADR-0006](docs/adr/0006-adhoc-codesign.md))
+
+(ADR-0001·0002·0007은 2026-10 API 개편으로 ADR-0008에 대체됐습니다 — 기록으로 남겨 둡니다.)
 
 ## 개발
 
@@ -105,6 +107,8 @@ swift run usage-tests      # 테스트 (자체 마이크로 러너, exit 0 = 통
 
 ## 참고
 
-- 이 앱은 무문서 API에 의존합니다 — Ollama가 응답을 바꾸면 고장 날 수 있고, 그때를 위해 파서는 관대하게, 원문 JSON 복사 메뉴가 관측 창구로 유지됩니다.
+- 데이터 소스는 공식 문서화된 Balance API입니다. 그래도 스키마는 변할 수 있어(2026-10에 한 번 크게 바뀌었습니다) 파서는 관대하게, "원문 JSON 복사" 메뉴가 관측 창구로 유지됩니다 — 실제로 그 변경을 이 앱이 겪고 [ADR-0008](docs/adr/0008-balance-api-single-source.md)로 기록했습니다.
+- 레이트 리밋은 사용자당 분당 10회로, 앱의 기본 60초 폴링이 서비스 권장값입니다.
+- `included`는 공식 스펙상 `oneOf`라 레거시 플랜은 `session`/`weekly`만 줍니다. 그 경우 이 앱은 값을 비우고 `—`로 표시합니다(레거시 지원은 백로그).
 - 개인 사용 전제로 만들어졌습니다(무서명·비공증). 배포가 필요해지면 서명·공증 절차를 추가하세요.
 - MIT License.
